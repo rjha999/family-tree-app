@@ -1,0 +1,162 @@
+<div class="container">
+  <div class="header">
+    <h1>Manage Family Members</h1>
+    <div class="header-actions">
+      <button class="secondary" routerLink="/">Back to Dashboard</button>
+      <button class="primary" (click)="openAddModal()">Add New Member</button>
+    </div>
+  </div>
+
+  <div *ngIf="successMessage" class="success-message">
+    {{ successMessage }}
+  </div>
+
+  <div *ngIf="error && !showModal" class="error-message">
+    {{ error }}
+  </div>
+
+  <div *ngIf="loading" class="loading">
+    <p>Loading members...</p>
+  </div>
+
+  <div *ngIf="!loading" class="members-grid">
+    <div *ngFor="let member of members" class="member-card">
+      <div class="member-header">
+        <h3>{{ member.firstName }} {{ member.lastName }}</h3>
+        <span class="gender-badge" [class.male]="member.gender === 'Male'" [class.female]="member.gender === 'Female'">
+          {{ member.gender }}
+        </span>
+      </div>
+      
+      <div class="member-details">
+        <p *ngIf="member.dateOfBirth"><strong>Born:</strong> {{ member.dateOfBirth | date }}</p>
+        <p *ngIf="member.email"><strong>Email:</strong> {{ member.email }}</p>
+        <p *ngIf="member.phone"><strong>Phone:</strong> {{ member.phone }}</p>
+        <p *ngIf="member.occupation"><strong>Occupation:</strong> {{ member.occupation }}</p>
+        
+        <div class="relationships">
+          <p *ngIf="member.fatherId"><strong>Father:</strong> {{ getMemberName(member.fatherId) }}</p>
+          <p *ngIf="member.motherId"><strong>Mother:</strong> {{ getMemberName(member.motherId) }}</p>
+          <p *ngIf="member.spouseId"><strong>Spouse:</strong> {{ getMemberName(member.spouseId) }}</p>
+        </div>
+      </div>
+
+      <div class="member-actions">
+        <button class="primary" (click)="openEditModal(member)">Edit</button>
+        <button class="danger" (click)="deleteMember(member.id)">Delete</button>
+      </div>
+    </div>
+
+    <div *ngIf="members.length === 0" class="empty-state">
+      <p>No family members yet. Add your first member!</p>
+      <button class="primary" (click)="openAddModal()">Add First Member</button>
+    </div>
+  </div>
+
+  <!-- Modal for Add/Edit -->
+  <div *ngIf="showModal" class="modal-overlay" (click)="closeModal()">
+    <div class="modal-content" (click)="$event.stopPropagation()">
+      <h2>{{ isEditMode ? 'Edit' : 'Add New' }} Family Member</h2>
+
+      <div *ngIf="error" class="error-message">
+        {{ error }}
+      </div>
+
+      <form (ngSubmit)="saveMember()">
+        <div class="form-row">
+          <div class="form-group">
+            <label for="firstName">First Name *</label>
+            <input type="text" id="firstName" [(ngModel)]="currentMember.firstName" name="firstName" required>
+          </div>
+
+          <div class="form-group">
+            <label for="lastName">Last Name *</label>
+            <input type="text" id="lastName" [(ngModel)]="currentMember.lastName" name="lastName" required>
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label for="gender">Gender *</label>
+            <select id="gender" [(ngModel)]="currentMember.gender" name="gender" required>
+              <option value="Male">Male</option>
+              <option value="Female">Female</option>
+              <option value="Other">Other</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label for="dateOfBirth">Date of Birth</label>
+            <input type="date" id="dateOfBirth" [(ngModel)]="currentMember.dateOfBirth" name="dateOfBirth">
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label for="email">Email</label>
+            <input type="email" id="email" [(ngModel)]="currentMember.email" name="email">
+          </div>
+
+          <div class="form-group">
+            <label for="phone">Phone</label>
+            <input type="tel" id="phone" [(ngModel)]="currentMember.phone" name="phone">
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="occupation">Occupation</label>
+          <input type="text" id="occupation" [(ngModel)]="currentMember.occupation" name="occupation">
+        </div>
+
+        <div class="form-group">
+          <label for="address">Address</label>
+          <textarea id="address" [(ngModel)]="currentMember.address" name="address" rows="2"></textarea>
+        </div>
+
+        <h3>Family Relationships</h3>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label for="fatherId">Father</label>
+            <select id="fatherId" [(ngModel)]="currentMember.fatherId" name="fatherId">
+              <option [ngValue]="undefined">None</option>
+              <option *ngFor="let parent of getAvailableParents('Male')" [ngValue]="parent.id">
+                {{ parent.firstName }} {{ parent.lastName }}
+              </option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label for="motherId">Mother</label>
+            <select id="motherId" [(ngModel)]="currentMember.motherId" name="motherId">
+              <option [ngValue]="undefined">None</option>
+              <option *ngFor="let parent of getAvailableParents('Female')" [ngValue]="parent.id">
+                {{ parent.firstName }} {{ parent.lastName }}
+              </option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="spouseId">Spouse</label>
+          <select id="spouseId" [(ngModel)]="currentMember.spouseId" name="spouseId">
+            <option [ngValue]="undefined">None</option>
+            <option *ngFor="let spouse of getAvailableSpouses()" [ngValue]="spouse.id">
+              {{ spouse.firstName }} {{ spouse.lastName }}
+            </option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label for="notes">Notes</label>
+          <textarea id="notes" [(ngModel)]="currentMember.notes" name="notes" rows="3"></textarea>
+        </div>
+
+        <div class="form-actions">
+          <button type="button" class="secondary" (click)="closeModal()">Cancel</button>
+          <button type="submit" class="primary">{{ isEditMode ? 'Update' : 'Add' }} Member</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>

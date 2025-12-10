@@ -1,0 +1,48 @@
+.app-container {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.navbar {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  padding: 20px 0;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+}
+
+.navbar-content {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 0 20px;
+}
+
+.app-title {
+  margin: 0;
+  font-size: 2em;
+  font-weight: 700;
+}
+
+.app-subtitle {
+  margin: 5px 0 0 0;
+  font-size: 1em;
+  opacity: 0.9;
+}
+
+main {
+  flex: 1;
+  padding: 20px 0;
+}
+
+.footer {
+  background: #333;
+  color: white;
+  text-align: center;
+  padding: 20px;
+  margin-top: 40px;
+}
+
+.footer p {
+  margin: 0;
+  font-size: 14px;
+}

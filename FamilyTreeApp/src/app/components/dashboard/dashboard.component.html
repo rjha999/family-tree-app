@@ -1,0 +1,216 @@
+<div class="container">
+  <div class="header">
+    <h1>Family Tree Dashboard</h1>
+    <button class="primary" routerLink="/manage">Manage Family Members</button>
+  </div>
+
+  <div *ngIf="loading" class="loading">
+    <p>Loading family tree...</p>
+  </div>
+
+  <div *ngIf="error" class="error">
+    <p>{{ error }}</p>
+    <button class="primary" (click)="loadFamilyTree()">Retry</button>
+  </div>
+
+  <div *ngIf="!loading && !error" class="family-tree-container">
+    <div class="tree-view">
+      <h2>Family Tree Visualization</h2>
+      
+      <div *ngIf="familyTree.length === 0" class="empty-state">
+        <p>No family members found. Start by adding members!</p>
+        <button class="primary" routerLink="/manage">Add First Member</button>
+      </div>
+
+      <div *ngIf="familyTree.length > 0" class="tree">
+        <!-- Root members (those without parents) -->
+        <ng-container *ngFor="let root of getRootMembers()">
+          <!-- Skip if this person was already displayed as someone's spouse -->
+          <div class="generation" *ngIf="!hasBeenDisplayedAsSpouse(root)">
+            <div class="couple-container">
+              <!-- Main person -->
+              <div class="member-card" (click)="showMemberDetails(root)">
+                <div class="member-photo" *ngIf="getPhotoUrl(root)">
+                  <img [src]="getPhotoUrl(root)" [alt]="root.firstName + ' ' + root.lastName">
+                </div>
+                <div class="member-initials" *ngIf="!getPhotoUrl(root)">
+                  {{ getInitials(root) }}
+                </div>
+                <div class="member-name">{{ root.firstName }}</div>
+              </div>
+
+              <!-- Spouse if exists -->
+              <div class="member-card" *ngIf="getSpouse(root)" (click)="showMemberDetails(getSpouse(root))">
+                <div class="member-photo" *ngIf="getPhotoUrl(getSpouse(root))">
+                  <img [src]="getPhotoUrl(getSpouse(root))" [alt]="getSpouse(root).firstName + ' ' + getSpouse(root).lastName">
+                </div>
+                <div class="member-initials" *ngIf="!getPhotoUrl(getSpouse(root))">
+                  {{ getInitials(getSpouse(root)) }}
+                </div>
+                <div class="member-name">{{ getSpouse(root).firstName }}</div>
+              </div>
+            </div>
+
+            <!-- Children of the couple -->
+            <ng-container *ngTemplateOutlet="childrenTemplate; context: { member: root, spouse: getSpouse(root) }"></ng-container>
+          </div>
+        </ng-container>
+
+        <!-- Recursive template for children -->
+        <ng-template #childrenTemplate let-member="member" let-spouse="spouse">
+          <div *ngIf="getChildren(member.id, spouse?.id).length > 0" class="children">
+            <div class="connector"></div>
+            <div class="children-row">
+              <div *ngFor="let child of getChildren(member.id, spouse?.id)" class="child-wrapper">
+                <div class="couple-container">
+                  <div class="member-card child" (click)="showMemberDetails(child)">
+                    <div class="member-photo" *ngIf="getPhotoUrl(child)">
+                      <img [src]="getPhotoUrl(child)" [alt]="child.firstName + ' ' + child.lastName">
+                    </div>
+                    <div class="member-initials" *ngIf="!getPhotoUrl(child)">
+                      {{ getInitials(child) }}
+                    </div>
+                    <div class="member-name">{{ child.firstName }}</div>
+                  </div>
+
+                  <!-- Child's spouse if exists -->
+                  <div class="member-card child" *ngIf="getSpouse(child)" (click)="showMemberDetails(getSpouse(child))">
+                    <div class="member-photo" *ngIf="getPhotoUrl(getSpouse(child))">
+                      <img [src]="getPhotoUrl(getSpouse(child))" [alt]="getSpouse(child).firstName + ' ' + getSpouse(child).lastName">
+                    </div>
+                    <div class="member-initials" *ngIf="!getPhotoUrl(getSpouse(child))">
+                      {{ getInitials(getSpouse(child)) }}
+                    </div>
+                    <div class="member-name">{{ getSpouse(child).firstName }}</div>
+                  </div>
+                </div>
+                
+                <!-- Recursively display grandchildren -->
+                <ng-container *ngTemplateOutlet="childrenTemplate; context: { member: child, spouse: getSpouse(child) }"></ng-container>
+              </div>
+            </div>
+          </div>
+        </ng-template>
+      </div>
+
+      <!-- Simple list view -->
+      <div class="list-view">
+        <h2>All Family Members</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Gender</th>
+              <th>Date of Birth</th>
+              <th>Age</th>
+              <th>Father</th>
+              <th>Mother</th>
+              <th>Spouse</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let member of familyTree">
+              <td>{{ member.firstName }} {{ member.lastName }}</td>
+              <td>{{ member.gender }}</td>
+              <td>{{ formatDate(member.dateOfBirth) }}</td>
+              <td>{{ getAge(member) }}</td>
+              <td>{{ getMemberById(member.fatherId)?.firstName || '-' }}</td>
+              <td>{{ getMemberById(member.motherId)?.firstName || '-' }}</td>
+              <td>{{ getMemberById(member.spouseId)?.firstName || '-' }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Member Details Modal -->
+  <div *ngIf="showDetailsModal && selectedMember" class="modal-overlay" (click)="closeDetailsModal()">
+    <div class="modal-content member-details-modal" (click)="$event.stopPropagation()">
+      <button class="close-btn" (click)="closeDetailsModal()">&times;</button>
+      
+      <div class="modal-header">
+        <div class="modal-photo-large">
+          <img *ngIf="getPhotoUrl(selectedMember)" [src]="getPhotoUrl(selectedMember)" [alt]="selectedMember.firstName">
+          <div *ngIf="!getPhotoUrl(selectedMember)" class="modal-initials">
+            {{ getInitials(selectedMember) }}
+          </div>
+        </div>
+        <h2>{{ selectedMember.firstName }} {{ selectedMember.lastName }}</h2>
+      </div>
+
+      <div class="modal-body">
+        <div class="detail-row">
+          <span class="label">Gender:</span>
+          <span class="value">{{ selectedMember.gender }}</span>
+        </div>
+        
+        <div class="detail-row" *ngIf="selectedMember.dateOfBirth">
+          <span class="label">Date of Birth:</span>
+          <span class="value">{{ formatDate(selectedMember.dateOfBirth) }}</span>
+        </div>
+
+        <div class="detail-row" *ngIf="selectedMember.age">
+          <span class="label">Age:</span>
+          <span class="value">{{ getAge(selectedMember) }}</span>
+        </div>
+
+        <div class="detail-row" *ngIf="selectedMember.dateOfDeath">
+          <span class="label">Date of Death:</span>
+          <span class="value">{{ formatDate(selectedMember.dateOfDeath) }}</span>
+        </div>
+
+        <div class="detail-row" *ngIf="selectedMember.email">
+          <span class="label">Email:</span>
+          <span class="value">{{ selectedMember.email }}</span>
+        </div>
+
+        <div class="detail-row" *ngIf="selectedMember.phone">
+          <span class="label">Phone:</span>
+          <span class="value">{{ selectedMember.phone }}</span>
+        </div>
+
+        <div class="detail-row" *ngIf="selectedMember.address">
+          <span class="label">Address:</span>
+          <span class="value">{{ selectedMember.address }}</span>
+        </div>
+
+        <div class="detail-row" *ngIf="selectedMember.occupation">
+          <span class="label">Occupation:</span>
+          <span class="value">{{ selectedMember.occupation }}</span>
+        </div>
+
+        <div class="relationships-section" *ngIf="selectedMember.fatherId || selectedMember.motherId || selectedMember.spouseId">
+          <h3>Family Relationships</h3>
+          
+          <div class="detail-row" *ngIf="selectedMember.fatherId">
+            <span class="label">Father:</span>
+            <span class="value">{{ getMemberById(selectedMember.fatherId)?.firstName }} {{ getMemberById(selectedMember.fatherId)?.lastName }}</span>
+          </div>
+
+          <div class="detail-row" *ngIf="selectedMember.motherId">
+            <span class="label">Mother:</span>
+            <span class="value">{{ getMemberById(selectedMember.motherId)?.firstName }} {{ getMemberById(selectedMember.motherId)?.lastName }}</span>
+          </div>
+
+          <div class="detail-row" *ngIf="selectedMember.spouseId">
+            <span class="label">Spouse:</span>
+            <span class="value">{{ getMemberById(selectedMember.spouseId)?.firstName }} {{ getMemberById(selectedMember.spouseId)?.lastName }}</span>
+          </div>
+        </div>
+
+        <div class="detail-row" *ngIf="selectedMember.notes">
+          <span class="label">Notes:</span>
+          <span class="value">{{ selectedMember.notes }}</span>
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <button class="primary" routerLink="/manage">
+          <span class="edit-icon">✏️</span> Edit Member
+        </button>
+        <button class="secondary" (click)="closeDetailsModal()">Close</button>
+      </div>
+    </div>
+  </div>
+</div>
