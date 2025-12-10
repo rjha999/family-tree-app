@@ -1,0 +1,129 @@
+name: Deploy to AWS
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+env:
+  AWS_REGION: us-east-1
+  DOTNET_VERSION: '8.0.x'
+  NODE_VERSION: '18.x'
+
+jobs:
+  build-and-test:
+    name: Build and Test
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: ${{ env.DOTNET_VERSION }}
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ env.NODE_VERSION }}
+
+    - name: Restore .NET dependencies
+      run: |
+        cd FamilyTreeAPI
+        dotnet restore
+
+    - name: Build .NET API
+      run: |
+        cd FamilyTreeAPI
+        dotnet build --configuration Release --no-restore
+
+    - name: Test .NET API
+      run: |
+        cd FamilyTreeAPI
+        dotnet test --no-restore --verbosity normal
+
+    - name: Install Angular dependencies
+      run: |
+        cd FamilyTreeApp
+        npm ci
+
+    - name: Build Angular App
+      run: |
+        cd FamilyTreeApp
+        npm run build -- --configuration production
+
+    - name: Upload API artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: api-build
+        path: FamilyTreeAPI/bin/Release/net8.0/
+
+    - name: Upload Frontend artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: frontend-build
+        path: FamilyTreeApp/dist/
+
+  deploy-to-aws:
+    name: Deploy to AWS
+    needs: build-and-test
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: ${{ env.AWS_REGION }}
+
+    - name: Download API artifact
+      uses: actions/download-artifact@v4
+      with:
+        name: api-build
+        path: ./api-build
+
+    - name: Download Frontend artifact
+      uses: actions/download-artifact@v4
+      with:
+        name: frontend-build
+        path: ./frontend-build
+
+    # Deploy API to Elastic Beanstalk
+    - name: Deploy API to Elastic Beanstalk
+      run: |
+        cd api-build
+        zip -r api-deploy.zip .
+        aws s3 cp api-deploy.zip s3://${{ secrets.AWS_EB_BUCKET }}/family-tree-api-${{ github.sha }}.zip
+        aws elasticbeanstalk create-application-version \
+          --application-name ${{ secrets.AWS_EB_APP_NAME }} \
+          --version-label ${{ github.sha }} \
+          --source-bundle S3Bucket="${{ secrets.AWS_EB_BUCKET }}",S3Key="family-tree-api-${{ github.sha }}.zip"
+        aws elasticbeanstalk update-environment \
+          --application-name ${{ secrets.AWS_EB_APP_NAME }} \
+          --environment-name ${{ secrets.AWS_EB_ENV_NAME }} \
+          --version-label ${{ github.sha }}
+
+    # Deploy Frontend to S3 + CloudFront
+    - name: Deploy Frontend to S3
+      run: |
+        aws s3 sync ./frontend-build s3://${{ secrets.AWS_S3_BUCKET }} --delete
+
+    - name: Invalidate CloudFront cache
+      run: |
+        aws cloudfront create-invalidation \
+          --distribution-id ${{ secrets.AWS_CLOUDFRONT_DISTRIBUTION_ID }} \
+          --paths "/*"
+
+    - name: Deployment successful
+      run: |
+        echo "✅ Deployment completed successfully!"
+        echo "API URL: https://${{ secrets.AWS_EB_ENV_NAME }}.elasticbeanstalk.com"
+        echo "Frontend URL: https://${{ secrets.AWS_CLOUDFRONT_DOMAIN }}"
